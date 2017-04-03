@@ -66,11 +66,14 @@ def split_to_sentences(document):
     ''' Takes in a document and returns a list of sentences. '''
     return nltk.tokenize.sent_tokenize(document)
 
+
 def noun_phrases_in_document(document):
     ''' Takes in a document and returns a list of all the noun phrases. '''
     collected_noun_phrases = []
+    
     for sentence in split_to_sentences(document):
        sentence_noun_phrases = noun_phrases(sentence)
-       collected_noun_phrases.extend(sentence_noun_phrases)
+       for np in sentence_noun_phrases:
+           indexed_np = {'np': np, 'sentence': sentence}    
+           collected_noun_phrases.append(indexed_np)
     return collected_noun_phrases
-
