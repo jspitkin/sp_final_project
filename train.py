@@ -7,6 +7,10 @@ TRAIN_DATA_DIRECTORY = 'data/train/'
 DEV_DATA_DIRECTORY = 'data/dev/'
 DEV_PRED_DIRECTORY = 'data_pred/dev/'
 
+MATERIAL = 0
+PROCESS = 1
+TASK = 2
+
 vectorizer = None
 tfidf_matrix = None
 
@@ -59,15 +63,7 @@ def main():
     dev_vectors = create_feature_vectors(examples)
 
     # Make a prediction for each development example
-    correct = 0
-    total = len(dev_vectors)
-    for vector in dev_vectors:
-        prediction = model.predict([vector[1:]])
-        if str(prediction[0]) == str(vector[0]):
-            correct += 1
-
-    print('Total:', total)
-    print('Correct:', correct)
+    evaluate(dev_vectors, model)
 
 
 def create_feature_vectors(examples):
@@ -168,6 +164,103 @@ def in_bounds(inner_start, inner_end, outer_start, outer_end):
         Allows for a degree of error eta. '''
     eta = 5
     return inner_start + eta >= outer_start and inner_end - eta <= outer_end
+
+
+def evaluate(dev_vectors, model):
+    process_correct = 0
+    process_predictions = 0
+    process_count = 0
+
+    task_correct = 0
+    task_predictions = 0
+    task_count = 0
+
+    material_correct = 0
+    material_predictions = 0
+    material_count = 0
+
+    total = len(dev_vectors)
+    total_correct = 0
+
+    for vector in dev_vectors:
+        prediction = model.predict([vector[1:]])
+        # Calculate correct predictions
+        if int(prediction[0]) == MATERIAL and vector[0] == MATERIAL:
+            material_correct += 1
+            total_correct += 1
+        elif int(prediction[0]) == PROCESS and vector[0] == PROCESS:
+            process_correct += 1
+            total_correct += 1
+        elif int(prediction[0]) == TASK and vector[0] == TASK:
+            task_correct += 1
+            total_correct += 1
+        # Calculate ground truth counts
+        if int(vector[0]) == MATERIAL:
+            material_count += 1
+        elif int(vector[0]) == PROCESS:
+            process_count += 1
+        elif int(vector[0]) == TASK:
+            task_count += 1
+        # Calculate prediction counts
+        if int(prediction[0]) == MATERIAL:
+            material_predictions += 1
+        elif int(prediction[0]) == PROCESS:
+            process_predictions += 1
+        elif int(prediction[0]) == TASK:
+            task_predictions += 1
+    
+    if process_count == 0:
+        process_recall = 0
+    else:
+        process_recall = process_correct / process_count
+    if process_predictions:
+        process_precision = 0
+    else:
+        process_precision = process_correct / process_predictions
+    if process_recall == 0 and process_precision == 0:
+        process_f1 = 0
+    else:
+        process_f1 = (2 * process_recall * process_precision) / (process_recall + process_precision)
+
+    if task_count == 0:
+        task_recall = 0
+    else:
+        task_recall = task_correct / task_count
+    if task_predictions == 0:
+        task_precision = 0
+    else:
+        task_precision = task_correct / task_predictions
+    if task_recall == 0 and task_precision == 0:
+        task_f1 = 0
+    else:
+        task_f1 = (2 * task_recall * task_precision) / (task_recall + task_precision)
+
+    if material_count == 0:
+        material_recall = 0
+    else:
+        material_recall = material_correct / material_count
+    if material_predictions == 0:
+        material_precision = 0
+    else:
+        material_precision = material_correct / material_predictions
+    if material_precision == 0 and material_recall == 0:
+        material_f1 = 0
+    else:
+        material_f1 = (2 * material_recall * material_precision) / (material_recall + material_precision)
+
+    overall_accuracy = total_correct / total
+
+    print()
+    print('Process')
+    print('Precision:', process_precision, '\tRecall:', process_recall, '\tF1-Score:', process_f1)
+    print()
+    print('Task')
+    print('Precision:', task_precision, '\tRecall:', task_recall, '\tF1-Score:', task_f1)
+    print()
+    print('Material')
+    print('Precision:', material_precision, '\tRecall:', material_recall, '\tF1-Score:', material_f1)
+    print()
+    print('Overall Accuracy:', overall_accuracy)
 
 
 if __name__ == '__main__':
