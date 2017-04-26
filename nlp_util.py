@@ -2,6 +2,8 @@ import nltk
 import re
 import ssl
 from nltk.stem.porter import *
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 def download_nltk_resources():
     """There is a known bug currently with nltk and ssl verification. This is a workaround via stackoverflow."""
@@ -12,6 +14,23 @@ def download_nltk_resources():
     else:
         ssl._create_default_https_context = _create_unverified_https_context
     nltk.download()
+
+
+def get_tfidf_vectors(corpora):
+    vectorizer = TfidfVectorizer()
+    tfidf_matrix = vectorizer.fit_transform(corpora)
+    return tfidf_matrix, vectorizer
+
+
+def get_tfidf_score(vectorizer, matrix, word, document_key):
+    dense = matrix.todense()
+    context = dense[document_key].tolist()[0]
+    score_sum = 0
+    for w in word.split():
+        if word in vectorizer.vocabulary_:
+            word_key = vectorizer.vocabulary_[word]
+            score_sum += context[word_key]
+    return score_sum
 
 
 def tokenize(sentence):

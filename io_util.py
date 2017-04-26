@@ -24,6 +24,12 @@ def parse_phrases_ann_file(path):
             phrase.key_phrase = line[2].strip('\n')
             line = line[1].split()
             phrase.label = line[0]
+            if phrase.label == 'Material':
+                phrase.label = 0
+            elif phrase.label == 'Process':
+                phrase.label = 1
+            elif phrase.label == 'Task':
+                phrase.label = 2
             phrase.start_index = int(line[1])
             if len(line) == 4:
                 phrase.end_index = int(line[3])
@@ -36,3 +42,11 @@ def parse_phrases_ann_file(path):
 def read_file(path):
     with open(path, 'r') as f:
         return f.read().replace('\n', '')
+
+def write_feature_vectors(path, vectors):
+    with open(path, 'w') as feature_vector_file:
+        for vector in vectors:
+            for entry in vector:
+                feature_vector_file.write(str(entry))
+                feature_vector_file.write(' ')
+            feature_vector_file.write('\n')
