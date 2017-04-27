@@ -3,6 +3,7 @@ import glob
 import os
 import Keyphrase as kp
 import Relation as rl
+from random import *
 
 def read_each_ann_file(path):
     labeled_examples = []
@@ -49,6 +50,7 @@ def parse_phrases_ann_file(path):
 
 def parse_relations_ann_file(path, rdict):
     relations = []
+    Negid = 1
     with open(path, 'r') as ann_file:
         text_path = path.strip('.ann') + '.txt'
         examples = rdict[text_path]['examples']
@@ -66,6 +68,7 @@ def parse_relations_ann_file(path, rdict):
                 A2 = line[2].split(':')
                 relationship.Arg2 = A2[1]
                 relationship.text_path = text_path
+                NegRel = rl.Relation()
             if line[0][0] == '*':
                 relationship.ID = line[0]
                 relationship.label = 0 # Synonym
@@ -73,13 +76,39 @@ def parse_relations_ann_file(path, rdict):
                 relationship.Arg1 = line[1]
                 relationship.Arg2 = line[2]
                 relationship.text_path = text_path
+                NegRel = rl.Relation()
+            negPhr = []
             for phrase in examples:
                 if relationship.Arg1 == phrase.ID:
                     relationship.sentence1 = phrase.sentence
                     relationship.key_phrase1 = phrase.key_phrase
-                if relationship.Arg2 == phrase.ID:
+                elif relationship.Arg2 == phrase.ID:
                     relationship.sentence2 = phrase.sentence
                     relationship.key_phrase2 = phrase.key_phrase
+                else:
+                    negPhr.append(phrase)
+            count = 0
+            i = 1
+            p1 = randint(0, int(len(negPhr)/4))
+            while count == 0:
+                p2 = p1 + i
+                if p2 >= len(negPhr):
+                    break
+                if negPhr[p1].label == negPhr[p2].label:
+                    i += 1
+                else:
+                    NegRel.ID = "N" + str(Negid) + ""
+                    Negid += 1
+                    NegRel.label = 2
+                    NegRel.key_phrase1 = negPhr[p1].key_phrase
+                    NegRel.sentence1 = negPhr[p1].sentence
+                    NegRel.Arg1 = negPhr[p1].ID
+                    NegRel.key_phrase2 = negPhr[p2].key_phrase
+                    NegRel.sentence2 = negPhr[p2].sentence
+                    NegRel.Arg2 = negPhr[p2].ID
+                    NegRel.text_path = negPhr[p2].text_path
+                    relations.append(NegRel)
+                    count += 1
             relations.append(relationship)
         return relations
 

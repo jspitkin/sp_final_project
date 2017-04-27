@@ -1,15 +1,17 @@
 import nlp_util
 import io_util
 import logistic_regression as lr
+import word_2_vec as w2v
 import pdb
 
 
 TRAIN_DATA_DIRECTORY = 'data/train/'
 DEV_DATA_DIRECTORY = 'data/dev/'
+TEST_DATA_DIRECTORY = 'data/test/'
 
-synonym_of = 0
-hyponym_of = 1
-neither = 2
+SYNONYM = 0
+HYPONYM = 1
+NEITHER = 2
 
 vectorizer = None
 tfidf_matrix = None
@@ -18,7 +20,7 @@ def main():
     global vectorizer
     global tfidf_matrix
 
-    ''' Training Process for Task B '''
+    ''' Training Process for Task C '''
     # Read in the labeled phrases
     test_phrases = io_util.read_each_ann_file(TRAIN_DATA_DIRECTORY) 
 
@@ -31,70 +33,82 @@ def main():
     # Remove examples where the sentence couldn't be found
     remove_bad_examples(examples)
 
+    # Read in the labeled relations
     relations = io_util.read_each_ann_file_rel(TRAIN_DATA_DIRECTORY, examples)
 
-    # these should print out differently
-    print(relations[1].Arg1)
-    print(relations[1].Arg2)
-    print(relations[1].ID)
-    print(relations[1].label)
-    print(relations[1].text_path)
-    print(relations[1].sentence1)
-    print(relations[1].sentence2)
-    print(relations[1].key_phrase1)
-    print(relations[1].key_phrase2)
-    print("\n next \n")
-    print(relations[23].Arg1)
-    print(relations[23].Arg2)
-    print(relations[23].ID)
-    print(relations[23].label)
-    print(relations[23].text_path)
-    print(relations[23].sentence1)
-    print(relations[23].sentence2)
-    print(relations[23].key_phrase1)
-    print(relations[23].key_phrase2)
+    # Read in the documents and create a relations dictionary
+    rel_examples, documents = generate_example_dictionary(relations)
 
-   
+    # Remove any examples that don't have the key phrases set
+    for key, value in rel_examples.items():
+        value['examples'][:] = [x for x in value['examples'] if x.key_phrase1 is not None and x.key_phrase2 is not None]
 
+    # Create tfidf matrix from the corpora
+    tfidf_matrix, vectorizer = nlp_util.get_tfidf_vectors(documents)
 
-    #print(examples['data/train/S0010938X15301189.txt']['examples'][0].sentence)
+    # Create features for each training example
+    training_features = create_features(rel_examples)
+    add_casing_features(training_features)
+    add_sim_features(training_features)
 
-##    # Create tfidf matrix from the corpora
-##    tfidf_matrix, vectorizer = nlp_util.get_tfidf_vectors(documents)
-##
-##    # Create feature vectors for each training example
-##    training_vectors = create_feature_vectors(examples)
-##
-##    # Write feature vectors to file
-##    io_util.write_feature_vectors('train_vectors_b.txt', training_vectors)
-##
-##    # Train a logistic regression classifer
-##    model = lr.train('train_vectors_b.txt') 
+    # Create feature vector from features
+    training_vectors = create_feature_vectors(training_features)
 
-##    ''' Testing Process for Task B '''
-##    # Read in the development phrases
-##    dev_phrases = io_util.read_each_ann_file(DEV_DATA_DIRECTORY)
-##
-##    # Read in the documents and get a dictionary
-##    examples, documents = generate_example_dictionary(dev_phrases)
-##
-##    # Identify the sentence each labeled phrase came from
-##    set_sentence_field(examples)
-##
-##    # Remove examples where the sentence couldn't be found
-##    remove_bad_examples(examples)
-##
-##    # Create tfidf matrix from the corpora
-##    tfidf_matrix, vectorizer = nlp_util.get_tfidf_vectors(documents)
-##
-##    # Create feature vectors for each training example
-##    dev_vectors = create_feature_vectors(examples)
-##
-##    # Make a prediction for each development example
-##    evaluate(dev_vectors, model)
+    # Write feature vectors to file
+    io_util.write_feature_vectors('train_vectors_c.txt', training_vectors)
+
+    # Train a logistic regression classifer
+    model = lr.train('train_vectors_c.txt') 
+
+    ''' Testing Process for Task C '''
+    # Read in the development phrases
+    dev_phrases = io_util.read_each_ann_file(DEV_DATA_DIRECTORY)
+
+    # Read in the documents and get a dictionary
+    examples, documents = generate_example_dictionary(dev_phrases)
+
+    # Identify the sentence each labeled phrase came from
+    set_sentence_field(examples)
+
+    # Remove examples where the sentence couldn't be found
+    remove_bad_examples(examples)
+
+    # Read in the labeled relations
+    relations = io_util.read_each_ann_file_rel(DEV_DATA_DIRECTORY, examples)
+
+    # Read in the documents and create a relations dictionary
+    rel_examples, documents = generate_example_dictionary(relations)
+
+    # Remove any examples that don't have the key phrases set
+    for key, value in rel_examples.items():
+        value['examples'][:] = [x for x in value['examples'] if x.key_phrase1 is not None and x.key_phrase2 is not None]
+
+    # Create tfidf matrix from the corpora
+    tfidf_matrix, vectorizer = nlp_util.get_tfidf_vectors(documents)
+
+    # Create features for each training example
+    dev_features = create_features(rel_examples)
+    add_casing_features(dev_features)
+    add_sim_features(dev_features)
+
+    # Create feature vector from features
+    dev_vectors = create_feature_vectors(dev_features)
+
+    # Make a prediction for each development example
+    evaluate(dev_vectors, model)
 
 
 def create_feature_vectors(examples):
+    feature_vectors = [[example['label']] for example in examples]
+    ignore_list = set(['sentence_1', 'sentence_2', 'arg_1', 'arg_2', 'key_phrase_1', 'key_phrase_2', 'label'])
+    for index, example in enumerate(examples):
+        sorted(example)
+        for key, value in example.items():
+            if key not in ignore_list:
+                feature_vectors[index].append(value)
+    return feature_vectors
+
+def create_features(examples):
     global vectorizer
     global tfidf_matrix
 
@@ -102,10 +116,78 @@ def create_feature_vectors(examples):
     document_number = 0
     for key, value in examples.items():
         for example in value['examples']:
-            tfidf_score = nlp_util.get_tfidf_score(vectorizer, tfidf_matrix, example.key_phrase, document_number)
-            vectors.append([example.label, tfidf_score])
+            vector = {'label':example.label}
+            vector['sentence_1'] = example.sentence1
+            vector['sentence_2'] = example.sentence2
+            vector['arg_1'] = example.Arg1
+            vector['arg_2'] = example.Arg2
+            vector['key_phrase_1'] = example.key_phrase1
+            vector['key_phrase_2'] = example.key_phrase2
+            # tfidf score features
+            tfidf_score_1 = nlp_util.get_tfidf_score(vectorizer, tfidf_matrix, example.key_phrase1, document_number)
+            tfidf_score_2 = nlp_util.get_tfidf_score(vectorizer, tfidf_matrix, example.key_phrase2, document_number)
+            vector['tfidf_score_1'] = tfidf_score_1
+            vector['tfidf_score_2'] = tfidf_score_2
+            vector['tfidf_combined'] = tfidf_score_1 + tfidf_score_2
+            vectors.append(vector)
         document_number += 1
     return vectors
+
+
+def add_casing_features(vectors):
+    for vector in vectors:
+        vector['all_caps_1'] = 0
+        vector['all_caps_2'] = 0
+        vector['both_all_caps'] = 0
+        vector['contains_cap_1'] = 0
+        vector['contains_cap_2'] = 0
+        vector['both_contains_cap'] = 0
+        vector['contains_digit_1'] = 0
+        vector['contains_digit_2'] = 0
+        vector['both_digit'] = 0
+        if any(char.isdigit() for char in vector['key_phrase_1']):
+            vector['contains_digit_1'] = 1
+        if any(char.isdigit() for char in vector['key_phrase_2']):
+            vector['contains_digit_2'] = 1
+        if vector['contains_digit_1'] + vector['contains_digit_2'] == 2:
+            vector['both_digit'] = 1
+        for word in vector['key_phrase_1'].split():
+            if word[0].isupper():
+                vector['contains_cap_1'] = 1
+        for word in vector['key_phrase_2'].split():
+            if word[0].isupper():
+                vector['contains_cap_2'] = 1
+        if vector['contains_cap_1'] + vector['contains_cap_2'] == 2:
+            vector['both_contains_cap'] = 1
+        all_caps_1 = True
+        for letter in vector['key_phrase_1']:
+            if letter.isalpha() and letter.islower():
+                all_caps_1 = False
+        if all_caps_1:
+            vector['all_caps_1'] = 1
+        all_caps_2 = True
+        for letter in vector['key_phrase_2']:
+            if letter.isalpha() and letter.islower():
+                all_caps_2 = False
+        if all_caps_2:
+            vector['all_caps_2'] = 1
+        if vector['all_caps_1'] + vector['all_caps_2'] == 2:
+            vector['both_all_caps'] = 1
+
+
+def add_sim_features(vectors):
+    model = w2v.get_model()
+    for vector in vectors:
+        vector['len_phrase_1'] = 0
+        for word in vector['key_phrase_1'].split():
+            vector['len_phrase_1'] += len(word)
+        vector['len_phrase_2'] = 0
+        for word in vector['key_phrase_1'].split():
+            vector['len_phrase_2'] += len(word)
+        vector['phrases_same_sent'] = 0
+        if vector['sentence_1'] == vector['sentence_2']:
+            vector['phrases_same_sent'] = 1
+        vector['cos_sim'] = w2v.get_cosine_sim(vector['key_phrase_1'], vector['key_phrase_2'], model)
 
 
 def remove_bad_examples(examples):
@@ -195,17 +277,17 @@ def in_bounds(inner_start, inner_end, outer_start, outer_end):
 
 
 def evaluate(dev_vectors, model):
-    process_correct = 0
-    process_predictions = 0
-    process_count = 0
+    hyponym_correct = 0
+    hyponym_predictions = 0
+    hyponym_count = 0
 
-    task_correct = 0
-    task_predictions = 0
-    task_count = 0
+    synonym_correct = 0
+    synonym_predictions = 0
+    synonym_count = 0
 
-    material_correct = 0
-    material_predictions = 0
-    material_count = 0
+    neither_correct = 0
+    neither_predictions = 0
+    neither_count = 0
 
     total = len(dev_vectors)
     total_correct = 0
@@ -213,80 +295,80 @@ def evaluate(dev_vectors, model):
     for vector in dev_vectors:
         prediction = model.predict([vector[1:]])
         # Calculate correct predictions
-        if int(prediction[0]) == MATERIAL and vector[0] == MATERIAL:
-            material_correct += 1
+        if int(prediction[0]) == HYPONYM and vector[0] == HYPONYM:
+            hyponym_correct += 1
             total_correct += 1
-        elif int(prediction[0]) == PROCESS and vector[0] == PROCESS:
-            process_correct += 1
+        elif int(prediction[0]) == SYNONYM and vector[0] == SYNONYM:
+            synonym_correct += 1
             total_correct += 1
-        elif int(prediction[0]) == TASK and vector[0] == TASK:
-            task_correct += 1
+        elif int(prediction[0]) == NEITHER and vector[0] == NEITHER:
+            neither_correct += 1
             total_correct += 1
         # Calculate ground truth counts
-        if int(vector[0]) == MATERIAL:
-            material_count += 1
-        elif int(vector[0]) == PROCESS:
-            process_count += 1
-        elif int(vector[0]) == TASK:
-            task_count += 1
+        if int(vector[0]) == HYPONYM:
+            hyponym_count += 1
+        elif int(vector[0]) == SYNONYM:
+            synonym_count += 1
+        elif int(vector[0]) == NEITHER:
+            neither_count += 1
         # Calculate prediction counts
-        if int(prediction[0]) == MATERIAL:
-            material_predictions += 1
-        elif int(prediction[0]) == PROCESS:
-            process_predictions += 1
-        elif int(prediction[0]) == TASK:
-            task_predictions += 1
+        if int(prediction[0]) == HYPONYM:
+            hyponym_predictions += 1
+        elif int(prediction[0]) == SYNONYM:
+            synonym_predictions += 1
+        elif int(prediction[0]) == NEITHER:
+            neither_predictions += 1
     
-    if process_count == 0:
-        process_recall = 0
+    if hyponym_count == 0:
+        hyponym_recall = 0
     else:
-        process_recall = process_correct / process_count
-    if process_predictions:
-        process_precision = 0
+        hyponym_recall = hyponym_correct / hyponym_count
+    if hyponym_predictions == 0:
+        hyponym_precision = 0
     else:
-        process_precision = process_correct / process_predictions
-    if process_recall == 0 and process_precision == 0:
-        process_f1 = 0
+        hyponym_precision = hyponym_correct / hyponym_predictions
+    if hyponym_recall == 0 and hyponym_precision == 0:
+        hyponym_f1 = 0
     else:
-        process_f1 = (2 * process_recall * process_precision) / (process_recall + process_precision)
+        hyponym_f1 = (2 * hyponym_recall * hyponym_precision) / (hyponym_recall + hyponym_precision)
 
-    if task_count == 0:
-        task_recall = 0
+    if synonym_count == 0:
+        synonym_recall = 0
     else:
-        task_recall = task_correct / task_count
-    if task_predictions == 0:
-        task_precision = 0
+        synonym_recall = synonym_correct / synonym_count
+    if synonym_predictions == 0:
+        synonym_precision = 0
     else:
-        task_precision = task_correct / task_predictions
-    if task_recall == 0 and task_precision == 0:
-        task_f1 = 0
+        synonym_precision = synonym_correct / synonym_predictions
+    if synonym_recall == 0 and synonym_precision == 0:
+        synonym_f1 = 0
     else:
-        task_f1 = (2 * task_recall * task_precision) / (task_recall + task_precision)
+        synonym_f1 = (2 * synonym_recall * synonym_precision) / (synonym_recall + synonym_precision)
 
-    if material_count == 0:
-        material_recall = 0
+    if neither_count == 0:
+        neither_recall = 0
     else:
-        material_recall = material_correct / material_count
-    if material_predictions == 0:
-        material_precision = 0
+        neither_recall = neither_correct / neither_count
+    if neither_predictions == 0:
+        neither_precision = 0
     else:
-        material_precision = material_correct / material_predictions
-    if material_precision == 0 and material_recall == 0:
-        material_f1 = 0
+        neither_precision = neither_correct / neither_predictions
+    if neither_precision == 0 and neither_recall == 0:
+        neither_f1 = 0
     else:
-        material_f1 = (2 * material_recall * material_precision) / (material_recall + material_precision)
+        neither_f1 = (2 * neither_recall * neither_precision) / (neither_recall + neither_precision)
 
     overall_accuracy = total_correct / total
 
     print()
-    print('Process')
-    print('Precision:', process_precision, '\tRecall:', process_recall, '\tF1-Score:', process_f1)
+    print('Hyponym-of - ', hyponym_count, 'examples')
+    print('Predictions:', hyponym_predictions, ' Precision:', hyponym_precision, ' Recall:', hyponym_recall, ' F1-Score:', hyponym_f1)
     print()
-    print('Task')
-    print('Precision:', task_precision, '\tRecall:', task_recall, '\tF1-Score:', task_f1)
+    print('Synonym-of - ', synonym_count, 'examples')
+    print('Predictions:', synonym_predictions, ' Precision:', synonym_precision, ' Recall:', synonym_recall, ' F1-Score:', synonym_f1)
     print()
-    print('Material')
-    print('Precision:', material_precision, '\tRecall:', material_recall, '\tF1-Score:', material_f1)
+    print('Neither - ', neither_count, 'examples')
+    print('Predictions:', neither_predictions, ' Precision:', neither_precision, ' Recall:', neither_recall, ' F1-Score:', neither_f1)
     print()
     print('Overall Accuracy:', overall_accuracy)
 

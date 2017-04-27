@@ -26,6 +26,8 @@ def get_tfidf_score(vectorizer, matrix, word, document_key):
     dense = matrix.todense()
     context = dense[document_key].tolist()[0]
     score_sum = 0
+    if word is None:
+        return 0
     for w in word.split():
         if word in vectorizer.vocabulary_:
             word_key = vectorizer.vocabulary_[word]

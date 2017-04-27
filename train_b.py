@@ -5,6 +5,7 @@ import logistic_regression as lr
 
 TRAIN_DATA_DIRECTORY = 'data/train/'
 DEV_DATA_DIRECTORY = 'data/dev/'
+TEST_DATA_DIRECTORY = 'data/test/'
 
 MATERIAL = 0
 PROCESS = 1
@@ -33,8 +34,13 @@ def main():
     # Create tfidf matrix from the corpora
     tfidf_matrix, vectorizer = nlp_util.get_tfidf_vectors(documents)
 
-    # Create feature vectors for each training example
-    training_vectors = create_feature_vectors(examples)
+    # Create features for each training example
+    training_features = create_features(examples)
+    add_casing_features(training_features)
+    add_pos_features(training_features)
+
+    # Create feature vector from features
+    training_vectors = create_feature_vectors(training_features)
 
     # Write feature vectors to file
     io_util.write_feature_vectors('train_vectors_b.txt', training_vectors)
@@ -58,14 +64,29 @@ def main():
     # Create tfidf matrix from the corpora
     tfidf_matrix, vectorizer = nlp_util.get_tfidf_vectors(documents)
 
-    # Create feature vectors for each training example
-    dev_vectors = create_feature_vectors(examples)
+    # Create features for each dev example
+    dev_features = create_features(examples)
+    add_casing_features(dev_features)
+    add_pos_features(dev_features)
+
+    # Create feature vector from features
+    dev_vectors = create_feature_vectors(dev_features)
 
     # Make a prediction for each development example
     evaluate(dev_vectors, model)
 
 
 def create_feature_vectors(examples):
+    feature_vectors = [[example['label']] for example in examples]
+    for index, example in enumerate(examples):
+        sorted(example)
+        for key, value in example.items():
+            if key != 'label' and key != 'sentence' and key != 'key_phrase':
+                feature_vectors[index].append(value)
+    return feature_vectors
+
+
+def create_features(examples):
     global vectorizer
     global tfidf_matrix
 
@@ -74,12 +95,54 @@ def create_feature_vectors(examples):
     for key, value in examples.items():
         for example in value['examples']:
             vector = {'label':example.label}
+            vector['sentence'] = example.sentence
+            vector['key_phrase'] = example.key_phrase
             # tfidf score features
             tfidf_score = nlp_util.get_tfidf_score(vectorizer, tfidf_matrix, example.key_phrase, document_number)
             vector['tfidf_score'] = tfidf_score
             vectors.append(vector)
         document_number += 1
     return vectors
+
+
+def add_casing_features(vectors):
+    for vector in vectors:
+        vector['all_caps'] = 0
+        vector['contains_cap'] = 0
+        vector['contains_digit'] = 0
+        if any(char.isdigit() for char in vector['key_phrase']):
+            vector['contains_digit'] = 1
+        for word in vector['key_phrase'].split():
+            if word[0].isupper():
+                vector['contains_cap'] = 1
+        all_caps = True
+        for letter in vector['key_phrase']:
+            if letter.isalpha() and letter.islower():
+                all_caps = False
+        if all_caps:
+            vector['all_caps'] = 1
+
+
+def add_pos_features(vectors):
+    for vector in vectors:
+        vector['len_phrase'] = 0
+        for word in vector['key_phrase'].split():
+            vector['len_phrase'] += len(word) 
+        #tokens = nlp_util.tokenize(vector['key_phrase'])
+        #pos_tags = nlp_util.pos_tag_tokens(tokens)
+        #vector['noun'] = 0
+        #vector['proper_noun'] = 0
+        #vector['plural'] = 0
+        #vector['other'] = 0
+        #for tag in pos_tags:
+        #    if tag[1] == 'NN' or tag[1] == 'NNS':
+        #        vector['noun'] = 1
+        #    if tag[1] == 'NNP' or tag[1] == 'NNPS':
+        #        vector['proper_noun'] = 1
+        #    if tag[1] == 'NNS' or tag[1] == 'NNPS':
+        #        vector['plural'] = 1
+        #    if tag[1] != 'NN' and tag[1] != 'NNS' and tag[1] != 'NNP' and tag[1] != 'NNPS':
+        #        vector['other'] = 1
 
 
 def remove_bad_examples(examples):
@@ -129,28 +192,6 @@ def set_sentence_field(examples):
                 prev_sentence = sentence
                 
 
-def generate_possible_features(phrases):
-    unique_head_nouns = get_unique_head_nouns(phrases)
-    unique_pos_tags = get_unique_pos_tags(phrases)
-    return features
-
-
-def get_unique_pos_tags(phrases):
-    ''' Takes in a list of phrases and returns a list of unique pos tags. '''
-    unique_pos_tags = set()
-    for phrase in phrases:
-        sentence_pos_tags = nlp_util.pos_tag_tokens(nlp_util.tokenize(phrase.sentence))
-        for pos_tag in sentence_pos_tags:
-            unique_pos_tags.add(pos_tag[1])
-    print(len(unique_pos_tags))
-
-
-def generate_feature_vectors(phrases, possible_features):
-    feature_vectors = []
-    for phrase in phrases:
-        feature_vector = {'label': phrase.label, 'features': []}
-
-
 def evaluate(dev_vectors, model):
     process_correct = 0
     process_predictions = 0
@@ -194,15 +235,11 @@ def evaluate(dev_vectors, model):
         elif int(prediction[0]) == TASK:
             task_predictions += 1
 
-    #print(task_correct, task_predictions, task_count)
-    #print(material_correct, material_predictions, material_count)
-    #print(process_correct, process_predictions, process_count)
-    
     if process_count == 0:
         process_recall = 0
     else:
         process_recall = process_correct / process_count
-    if process_predictions:
+    if process_predictions == 0:
         process_precision = 0
     else:
         process_precision = process_correct / process_predictions
@@ -240,16 +277,16 @@ def evaluate(dev_vectors, model):
     overall_accuracy = total_correct / total
 
     print()
-    print('Process')
-    print('Precision:', process_precision, '\tRecall:', process_recall, '\tF1-Score:', process_f1)
+    print('Process - 457 examples')
+    print('Predictions:', process_predictions, ' Precision:', round(process_precision, 3), ' Recall:', round(process_recall, 3), ' F1-Score:', round(process_f1, 3))
     print()
-    print('Task')
-    print('Precision:', task_precision, '\tRecall:', task_recall, '\tF1-Score:', task_f1)
+    print('Task - 137 examples')
+    print('Predictions:', task_predictions, ' Precision:', round(task_precision, 3), ' Recall:', round(task_recall, 3), ' F1-Score:', round(task_f1, 3))
     print()
-    print('Material')
-    print('Precision:', material_precision, '\tRecall:', material_recall, '\tF1-Score:', material_f1)
+    print('Material - 557 examples')
+    print('Predictions:', material_predictions, 'Precision:', round(material_precision, 3), ' Recall:', round(material_recall, 3), ' F1-Score:', round(material_f1, 3))
     print()
-    print('Overall Accuracy:', overall_accuracy)
+    print('Overall Accuracy:', round(overall_accuracy, 3))
 
 
 if __name__ == '__main__':
