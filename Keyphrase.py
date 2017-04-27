@@ -11,9 +11,9 @@ class Keyphrase:
     def __str__(self):
         return_string = ""
         if self.ID is not None:
-            return_string += self.ID + " "
+            return_string += str(self.ID) + " "
         if self.label is not None:
-            return_string += self.label + " "
+            return_string += str(self.label) + " "
         if self.start_index is not None:
             return_string += str(self.start_index) + " "
         if self.end_index is not None:

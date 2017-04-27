@@ -5,7 +5,6 @@ import logistic_regression as lr
 
 TRAIN_DATA_DIRECTORY = 'data/train/'
 DEV_DATA_DIRECTORY = 'data/dev/'
-DEV_PRED_DIRECTORY = 'data_pred/dev/'
 
 MATERIAL = 0
 PROCESS = 1
@@ -38,10 +37,10 @@ def main():
     training_vectors = create_feature_vectors(examples)
 
     # Write feature vectors to file
-    io_util.write_feature_vectors('train_vectors.txt', training_vectors)
+    io_util.write_feature_vectors('train_vectors_b.txt', training_vectors)
 
     # Train a logistic regression classifer
-    model = lr.train() 
+    model = lr.train('train_vectors_b.txt') 
 
     ''' Testing Process for Task B '''
     # Read in the development phrases
@@ -74,8 +73,11 @@ def create_feature_vectors(examples):
     document_number = 0
     for key, value in examples.items():
         for example in value['examples']:
+            vector = {'label':example.label}
+            # tfidf score features
             tfidf_score = nlp_util.get_tfidf_score(vectorizer, tfidf_matrix, example.key_phrase, document_number)
-            vectors.append([example.label, tfidf_score])
+            vector['tfidf_score'] = tfidf_score
+            vectors.append(vector)
         document_number += 1
     return vectors
 
@@ -128,42 +130,25 @@ def set_sentence_field(examples):
                 
 
 def generate_possible_features(phrases):
-    features = {}
     unique_head_nouns = get_unique_head_nouns(phrases)
     unique_pos_tags = get_unique_pos_tags(phrases)
     return features
+
 
 def get_unique_pos_tags(phrases):
     ''' Takes in a list of phrases and returns a list of unique pos tags. '''
     unique_pos_tags = set()
     for phrase in phrases:
-        if phrase.sentence is None:
-            x = 5
-        #sentence_pos_tags = nlp_util.pos_tag_tokens(nlp_util.tokenize(phrase.sentence))
-        #print(sentence_pos_tags)
-
-
-def get_unique_head_nouns(phrases):
-    ''' Takes in a list of phrases and returns a list of unique head nouns.
-        Using the simple heuristic of assuming the left-most word is the head noun. '''
-    unique_head_nouns = set()
-    for phrase in phrases:
-        unique_head_nouns.add(phrase.key_phrase.split()[-1])
-    return list(unique_head_nouns)
+        sentence_pos_tags = nlp_util.pos_tag_tokens(nlp_util.tokenize(phrase.sentence))
+        for pos_tag in sentence_pos_tags:
+            unique_pos_tags.add(pos_tag[1])
+    print(len(unique_pos_tags))
 
 
 def generate_feature_vectors(phrases, possible_features):
     feature_vectors = []
     for phrase in phrases:
         feature_vector = {'label': phrase.label, 'features': []}
-
-
-
-def in_bounds(inner_start, inner_end, outer_start, outer_end):
-    ''' Returns true if the inner bounds lie within the outer bounds.
-        Allows for a degree of error eta. '''
-    eta = 5
-    return inner_start + eta >= outer_start and inner_end - eta <= outer_end
 
 
 def evaluate(dev_vectors, model):
@@ -208,6 +193,10 @@ def evaluate(dev_vectors, model):
             process_predictions += 1
         elif int(prediction[0]) == TASK:
             task_predictions += 1
+
+    #print(task_correct, task_predictions, task_count)
+    #print(material_correct, material_predictions, material_count)
+    #print(process_correct, process_predictions, process_count)
     
     if process_count == 0:
         process_recall = 0

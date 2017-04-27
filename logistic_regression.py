@@ -8,14 +8,12 @@ from sklearn import metrics
 from random import randint
 from random import shuffle
 
-train_vectors_path = './train_vectors.txt'
-test_vectors_path = './test_vectors.txt'
 
-def train():
+def train(file_path):
     # Read in the training feature vectors
     feature_vectors = []
     labels = []
-    with open(train_vectors_path, 'r') as dataset_file:
+    with open(file_path, 'r') as dataset_file:
         for line in dataset_file:
             labels.append(line.split()[0])
             feature_vectors.append(line.split()[1:])
